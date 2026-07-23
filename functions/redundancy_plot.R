@@ -12,28 +12,28 @@ cerno_simplify_go_terms <- function(res_df,
                                     padj_cutoff = 0.05,
                                     top_n = NULL,
                                     selection_mode = c(
-                                      "significant_all",
                                       "significant_top_n",
+                                      "significant_all",
                                       "top_n",
-                                      "all"
+                                      "significant_or_top_n"
                                     ),
                                     similarity_cutoff = 0.7,
                                     semantic_measure = "Wang",
                                     split_after_words = 7) {
-
+  
   ontology <- match.arg(ontology)
   selection_mode <- match.arg(selection_mode)
-
+  
   required_cols <- c(ontology_col, id_col, term_col, padj_col, auc_col)
   missing_cols <- setdiff(required_cols, colnames(res_df))
-
+  
   if (length(missing_cols) > 0) {
     stop(
       "Missing columns in res_df: ",
       paste(missing_cols, collapse = ", ")
     )
   }
-
+  
   go_map <- go_term_map |>
     dplyr::transmute(
       map_id = ID,
@@ -41,7 +41,7 @@ cerno_simplify_go_terms <- function(res_df,
       ONTOLOGY_map = ONTOLOGY_msigdbr
     ) |>
     dplyr::distinct(map_id, .keep_all = TRUE)
-
+  
   x <- res_df |>
     dplyr::filter(.data[[ontology_col]] == ontology) |>
     dplyr::left_join(
@@ -77,42 +77,55 @@ cerno_simplify_go_terms <- function(res_df,
         NA_real_
       }
     )
-
-  if (selection_mode == "significant_all") {
-
-    x <- x |>
-      dplyr::filter(.data[[padj_col]] < padj_cutoff)
-
-  } else if (selection_mode == "significant_top_n") {
-
+  
+  if (selection_mode == "significant_top_n") {
+    
     if (is.null(top_n)) {
       stop("Set top_n when selection_mode = 'significant_top_n'.")
     }
-
+    
     x <- x |>
       dplyr::filter(.data[[padj_col]] < padj_cutoff) |>
       dplyr::slice_head(n = top_n)
-
+    
+  } else if (selection_mode == "significant_all") {
+    
+    x <- x |>
+      dplyr::filter(.data[[padj_col]] < padj_cutoff)
+    
   } else if (selection_mode == "top_n") {
-
+    
     if (is.null(top_n)) {
       stop("Set top_n when selection_mode = 'top_n'.")
     }
-
+    
     x <- x |>
       dplyr::slice_head(n = top_n)
-
-  } else if (selection_mode == "all") {
-
-    x <- x
+    
+  } else if (selection_mode == "significant_or_top_n") {
+    
+    if (is.null(top_n)) {
+      stop("Set top_n when selection_mode = 'significant_or_top_n'.")
+    }
+    
+    sig <- x |>
+      dplyr::filter(.data[[padj_col]] < padj_cutoff)
+    
+    if (nrow(sig) >= 2) {
+      x <- sig |>
+        dplyr::slice_head(n = top_n)
+    } else {
+      x <- x |>
+        dplyr::slice_head(n = top_n)
+    }
   }
-
+  
   if (nrow(x) == 0) {
     stop("No GO terms remain after filtering.")
   }
-
+  
   if (nrow(x) == 1) {
-
+    
     x_out <- x |>
       dplyr::mutate(
         redundancy_cluster = "R01",
@@ -122,7 +135,7 @@ cerno_simplify_go_terms <- function(res_df,
         representative_label = pathway_clean,
         redundant_to = NA_character_
       )
-
+    
     return(
       list(
         all_terms = x_out,
@@ -143,29 +156,29 @@ cerno_simplify_go_terms <- function(res_df,
       )
     )
   }
-
+  
   sim_mat <- compute_go_semantic_similarity(
     go_ids = x$GOID,
     ontology = ontology,
     measure = semantic_measure
   )
-
+  
   adjacency <- sim_mat >= similarity_cutoff
   diag(adjacency) <- FALSE
-
+  
   g <- igraph::graph_from_adjacency_matrix(
     adjacency,
     mode = "undirected",
     diag = FALSE
   )
-
+  
   comp <- igraph::components(g)$membership
-
+  
   cluster_id <- sprintf(
     "R%02d",
     as.integer(factor(comp[x$GOID]))
   )
-
+  
   x_annotated <- x |>
     dplyr::mutate(
       redundancy_cluster = cluster_id
@@ -188,15 +201,15 @@ cerno_simplify_go_terms <- function(res_df,
       )
     ) |>
     dplyr::ungroup()
-
+  
   representatives <- x_annotated |>
     dplyr::filter(is_representative) |>
     dplyr::arrange(.data[[padj_col]])
-
+  
   removed <- x_annotated |>
     dplyr::filter(!is_representative) |>
     dplyr::arrange(redundant_to, .data[[padj_col]])
-
+  
   list(
     all_terms = x_annotated,
     representatives = representatives,
@@ -219,36 +232,36 @@ cerno_simplify_go_terms <- function(res_df,
 compute_go_semantic_similarity <- function(go_ids,
                                            ontology = c("BP", "CC", "MF"),
                                            measure = "Wang") {
-
+  
   ontology <- match.arg(ontology)
   go_ids <- unique(as.character(go_ids))
-
+  
   compute_ic <- !(measure %in% c("Wang"))
-
+  
   sem_data <- GOSemSim::godata(
-    OrgDb = "org.Hs.eg.db",
+    annoDb = "org.Hs.eg.db",
     ont = ontology,
     computeIC = compute_ic
   )
-
+  
   n <- length(go_ids)
-
+  
   sim_mat <- matrix(
     0,
     nrow = n,
     ncol = n,
     dimnames = list(go_ids, go_ids)
   )
-
+  
   diag(sim_mat) <- 1
-
+  
   if (n < 2) {
     return(sim_mat)
   }
-
+  
   for (i in seq_len(n)) {
     for (j in i:n) {
-
+      
       if (i == j) {
         sim_ij <- 1
       } else {
@@ -258,21 +271,21 @@ compute_go_semantic_similarity <- function(go_ids,
           semData = sem_data,
           measure = measure
         )
-
+        
         sim_ij <- as.numeric(sim_ij)[1]
-
+        
         if (is.na(sim_ij) || is.nan(sim_ij)) {
           sim_ij <- 0
         }
-
+        
         sim_ij <- max(0, min(1, sim_ij))
       }
-
+      
       sim_mat[i, j] <- sim_ij
       sim_mat[j, i] <- sim_ij
     }
   }
-
+  
   sim_mat
 }
 
