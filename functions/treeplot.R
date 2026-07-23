@@ -12,31 +12,31 @@ select_cerno_terms_for_tree <- function(df,
                                           "top_n",
                                           "significant_or_top_n"
                                         )) {
-
+  
   selection_mode <- match.arg(selection_mode)
-
+  
   x <- df |>
     filter(.data[[ontology_col]] == ontology) |>
     filter(!is.na(.data[[padj_col]])) |>
     arrange(.data[[padj_col]])
-
+  
   switch(
     selection_mode,
-
+    
     significant_top_n = x |>
       filter(.data[[padj_col]] < padj_cutoff) |>
       slice_head(n = top_n),
-
+    
     significant_all = x |>
       filter(.data[[padj_col]] < padj_cutoff),
-
+    
     top_n = x |>
       slice_head(n = top_n),
-
+    
     significant_or_top_n = {
       sig <- x |>
         filter(.data[[padj_col]] < padj_cutoff)
-
+      
       if (nrow(sig) >= 3) {
         sig |> slice_head(n = top_n)
       } else {
@@ -62,6 +62,8 @@ cerno_treeplot <- function(res_df,
                              "top_n",
                              "significant_or_top_n"
                            ),
+                           highlight1 = NULL,
+                           highlight2 = NULL,
                            nCluster = 5,
                            cluster_method = "ward.D2",
                            branch_length = "none",
@@ -82,29 +84,29 @@ cerno_treeplot <- function(res_df,
                            show_legend = TRUE,
                            legend_position = "right",
                            cluster_palette = NULL) {
-
+  
   selection_mode <- match.arg(selection_mode)
-
+  
   required_res_cols <- c(ontology_col, id_col, term_col, padj_col, size_col)
   missing_res_cols <- setdiff(required_res_cols, colnames(res_df))
-
+  
   if (length(missing_res_cols) > 0) {
     stop(
       "Missing columns in res_df: ",
       paste(missing_res_cols, collapse = ", ")
     )
   }
-
+  
   required_members_cols <- c("ID", "pathway_genes")
   missing_members_cols <- setdiff(required_members_cols, colnames(members_df))
-
+  
   if (length(missing_members_cols) > 0) {
     stop(
       "Missing columns in members_df: ",
       paste(missing_members_cols, collapse = ", ")
     )
   }
-
+  
   selected <- select_cerno_terms_for_tree(
     df = res_df,
     ontology = ontology,
@@ -114,7 +116,7 @@ cerno_treeplot <- function(res_df,
     padj_cutoff = padj_cutoff,
     selection_mode = selection_mode
   )
-
+  
   if (nrow(selected) < 3) {
     stop(
       "Too few terms for the tree plot in ontology ",
@@ -122,7 +124,7 @@ cerno_treeplot <- function(res_df,
       ". At least three terms are required."
     )
   }
-
+  
   dat <- selected |>
     dplyr::left_join(
       members_df,
@@ -136,6 +138,14 @@ cerno_treeplot <- function(res_df,
         .data[[term_col]],
         split_after_words = split_after_words
       ),
+      highlight_marker = dplyr::case_when(
+        as.character(.data[[id_col]]) %in% as.character(highlight2) |
+          as.character(.data[[term_col]]) %in% as.character(highlight2) ~ "**",
+        as.character(.data[[id_col]]) %in% as.character(highlight1) |
+          as.character(.data[[term_col]]) %in% as.character(highlight1) ~ "*",
+        TRUE ~ ""
+      ),
+      tip_label = paste0(tip_label, highlight_marker),
       phy_label = make.unique(
         stringr::str_replace_all(tip_label, "\n", " ")
       ),
@@ -143,15 +153,15 @@ cerno_treeplot <- function(res_df,
         pmax(.data[[padj_col]], .Machine$double.xmin)
       )
     )
-
+  
   if (nrow(dat) < 3) {
     stop("Fewer than three terms remain after joining members_df.")
   }
-
+  
   n <- nrow(dat)
-
+  
   sim_mat <- matrix(0, nrow = n, ncol = n)
-
+  
   for (i in seq_len(n)) {
     for (j in i:n) {
       sim_ij <- jaccard_index(
@@ -162,22 +172,22 @@ cerno_treeplot <- function(res_df,
       sim_mat[j, i] <- sim_ij
     }
   }
-
+  
   rownames(sim_mat) <- dat$phy_label
   colnames(sim_mat) <- dat$phy_label
-
+  
   dist_mat <- as.dist(1 - sim_mat)
   hc <- hclust(dist_mat, method = cluster_method)
-
+  
   nCluster <- min(nCluster, nrow(dat) - 1)
   nCluster <- max(nCluster, 2)
-
+  
   cluster_raw <- cutree(hc, k = nCluster)
   cluster_id <- paste0("c", cluster_raw)
   names(cluster_id) <- names(cluster_raw)
-
+  
   phy <- ape::as.phylo(hc)
-
+  
   tip_data <- dat |>
     dplyr::mutate(
       cluster = unname(cluster_id[phy_label])
@@ -190,7 +200,7 @@ cerno_treeplot <- function(res_df,
       neglog10_padj = neglog10_padj,
       size_value = .data[[size_col]]
     )
-
+  
   cluster_labels <- tip_data |>
     dplyr::group_by(cluster) |>
     dplyr::summarise(
@@ -204,31 +214,31 @@ cerno_treeplot <- function(res_df,
     dplyr::mutate(
       cluster_name = make.unique(cluster_name)
     )
-
+  
   cluster_label_map <- stats::setNames(
     cluster_labels$cluster_name,
     cluster_labels$cluster
   )
-
+  
   tip_data <- tip_data |>
     dplyr::mutate(
       cluster_name = unname(cluster_label_map[cluster])
     )
-
+  
   tip_groups <- split(tip_data$label, tip_data$cluster)
-
+  
   clade_nodes <- purrr::map_dfr(
     names(tip_groups),
     function(cl) {
       tips <- tip_groups[[cl]]
       tip_idx <- match(tips, phy$tip.label)
-
+      
       node <- if (length(tip_idx) == 1) {
         tip_idx
       } else {
         ape::getMRCA(phy, tip_idx)
       }
-
+      
       tibble::tibble(
         cluster = cl,
         node = node,
@@ -236,22 +246,22 @@ cerno_treeplot <- function(res_df,
       )
     }
   )
-
+  
   p0 <- ggtree::ggtree(
     phy,
     layout = "rectangular",
     branch.length = branch_length,
     linewidth = branch_size
   )
-
+  
   p0$data$x <- p0$data$x * tree_scale
-
+  
   tree_max_x <- max(p0$data$x, na.rm = TRUE)
-
+  
   tip_y <- p0$data |>
     dplyr::filter(isTip) |>
     dplyr::select(label, y)
-
+  
   cluster_label_pos <- tip_data |>
     dplyr::left_join(tip_y, by = "label") |>
     dplyr::group_by(cluster, cluster_name) |>
@@ -262,27 +272,27 @@ cerno_treeplot <- function(res_df,
     dplyr::mutate(
       x = tree_max_x + group_label_offset
     )
-
+  
   x_right <- tree_max_x + tip_label_offset + tip_label_space + right_padding
-
+  
   if (show_cluster_labels) {
     x_right <- max(
       x_right,
       max(cluster_label_pos$x, na.rm = TRUE) + right_padding
     )
   }
-
+  
   cluster_levels <- sort(unique(tip_data$cluster_name))
-
+  
   if (is.null(cluster_palette)) {
     cluster_palette <- default_cluster_palette(length(cluster_levels))
   }
-
+  
   cluster_palette <- stats::setNames(
     cluster_palette[seq_along(cluster_levels)],
     cluster_levels
   )
-
+  
   p <- p0 %<+% tip_data +
     ggtree::geom_hilight(
       data = clade_nodes,
@@ -352,7 +362,7 @@ cerno_treeplot <- function(res_df,
       legend.box.margin = margin(0, 0, 0, 14),
       plot.margin = margin(8, 8, 8, 8)
     )
-
+  
   if (show_cluster_labels) {
     p <- p +
       geom_label(
@@ -373,6 +383,6 @@ cerno_treeplot <- function(res_df,
         show.legend = FALSE
       )
   }
-
+  
   p
 }
