@@ -55,9 +55,9 @@ plot_ontology <- "MF"       # one of: BP, CC, MF
 padj_cutoff <- 0.05
 top_n <- 30
 
-# Optional pathway highlighting in the dot plot.
-highlight_group_1 <- NULL
-highlight_group_2 <- NULL
+# Optional pathway highlighting in the dotplot and treeplot. 
+highlight_group_1 <- NULL # the most relevant pathways
+highlight_group_2 <- NULL # pathways of secondary importance
 
 # MSigDB pathway definitions --------------------------------------------------
 collections <- load_msigdb_collections()
@@ -66,7 +66,7 @@ go_members <- build_pathway_members(go_msig)
 go_term_map <- build_go_term_map(go_msig)
 reactome_members <- build_pathway_members(collections$REACTOME)
 
-# Read and normalize CERNO results -------------------------------------------
+# Read and normalize CERNO results --------------------------------------------
 go_results <- purrr::imap_dfr(
   go_files,
   function(file_name, ontology) {
@@ -78,7 +78,7 @@ go_results <- purrr::imap_dfr(
 )
 
 go_results <- purrr::map_dfr(
-  valid_ontologies,
+  c("BP", "CC", "MF"),
   function(ontology) {
     canonicalize_result_ids(
       results = dplyr::filter(go_results, ONTOLOGY == ontology),
@@ -110,15 +110,19 @@ p_dot <- cerno_dotplot(
   point_size_range = c(1.5, 7)
 )
 
+# show plot
+p_dot
+
 ggsave(
-  file.path(output_dir, paste0("cerno_dotplot_", tolower(plot_ontology), ".png")),
+  file.path(output_dir, paste0("cerno_dotplot_GO-", 
+                               tolower(plot_ontology), ".png")),
   p_dot,
   width = 10,
   height = 8,
   dpi = 300
 )
 
-# Manhattan-style plot across GO ontologies ----------------------------------
+# Manhattan-style plot across GO ontologies -----------------------------------
 p_manhattan <- cerno_manhattan_go(
   df = go_results,
   padj_cutoff = padj_cutoff,
@@ -127,29 +131,42 @@ p_manhattan <- cerno_manhattan_go(
   seed = 123
 )
 
+# show plot
+p_manhattan
+
 ggsave(
-  file.path(output_dir, "cerno_manhattan_go.png"),
+  file.path(output_dir, "cerno_manhattan_GO.png"),
   p_manhattan,
   width = 11,
   height = 7,
   dpi = 300
 )
 
-# Pathway-overlap tree ---------------------------------------------------------
+# Pathway-overlap tree --------------------------------------------------------
 p_tree <- cerno_treeplot(
   res_df = go_results,
   members_df = go_members,
   ontology = plot_ontology,
+  highlight1 = highlight_group_1,
+  highlight2 = highlight_group_2,
   top_n = top_n,
   padj_cutoff = padj_cutoff,
   selection_mode = "significant_or_top_n",
-  nCluster = 5,
+  nCluster = 5, # adapt to the plot
+  tree_scale = 0.35, # how big the tree is
+  tip_label_space = 0.5, # controls the space between tree and legend
+  point_size_range = c(0.8, 2.8), # controls the sizes of AUC
+  tip_label_size = 3, # tree's text size
   show_cluster_labels = FALSE,
   show_legend = TRUE
 )
 
+# show plot
+p_tree
+
 ggsave(
-  file.path(output_dir, paste0("cerno_treeplot_", tolower(plot_ontology), ".png")),
+  file.path(output_dir, paste0("cerno_treeplot_", 
+                               tolower(plot_ontology), ".png")),
   p_tree,
   width = 12,
   height = 9,
@@ -165,14 +182,18 @@ p_go_graph <- cerno_go_graph(
   top_n = top_n,
   padj_cutoff = padj_cutoff,
   selection_mode = "significant_or_top_n",
-  max_depth = 4,
+  max_depth = 4, # if you have >30 significant pathways, set smaller max_depth
   include_roots = TRUE,
   label_ancestors = FALSE,
   layout = "sugiyama"
 )
 
+# show plot
+p_go_graph
+
 ggsave(
-  file.path(output_dir, paste0("cerno_go_graph_", tolower(plot_ontology), ".png")),
+  file.path(output_dir, paste0("cerno_go_graph_", 
+                               tolower(plot_ontology), ".png")),
   p_go_graph,
   width = 12,
   height = 9,
@@ -180,38 +201,26 @@ ggsave(
   limitsize = FALSE
 )
 
-# GO semantic redundancy analysis and network --------------------------------
-n_significant <- sum(
-  go_results$ONTOLOGY == plot_ontology &
-    !is.na(go_results$adj.P.Val) &
-    go_results$adj.P.Val < padj_cutoff
-)
-
-redundancy_selection_mode <- if (n_significant > 0) {
-  "significant_top_n"
-} else {
-  "top_n"
-}
-
+# GO semantic redundancy analysis and network ---------------------------------
 simplified_go <- cerno_simplify_go_terms(
   res_df = go_results,
   go_term_map = go_term_map,
   ontology = plot_ontology,
   padj_cutoff = padj_cutoff,
   top_n = top_n,
-  selection_mode = redundancy_selection_mode,
+  selection_mode = "significant_or_top_n",
   similarity_cutoff = 0.7,
   semantic_measure = "Wang"
 )
 
 write_csv(
   simplified_go$representatives,
-  file.path(output_dir, paste0("GO_", plot_ontology, "_representatives.csv"))
+  file.path(output_dir, paste0("GO-", plot_ontology, "_representatives.csv"))
 )
 
 write_csv(
   simplified_go$removed,
-  file.path(output_dir, paste0("GO_", plot_ontology, "_redundant_terms.csv"))
+  file.path(output_dir, paste0("GO-", plot_ontology, "_redundant_terms.csv"))
 )
 
 p_redundancy <- cerno_go_redundancy_emap(
@@ -221,6 +230,9 @@ p_redundancy <- cerno_go_redundancy_emap(
   layout = "fr",
   show_removed_labels = TRUE
 )
+
+# show plot
+p_redundancy
 
 ggsave(
   file.path(
@@ -234,44 +246,50 @@ ggsave(
   limitsize = FALSE
 )
 
+
 # Optional Reactome plots -----------------------------------------------------
-if (!is.null(reactome_results)) {
-  p_reactome_dot <- cerno_dotplot(
-    df = reactome_results,
-    top_n = top_n,
-    padj_cutoff = padj_cutoff,
-    highlight1 = highlight_group_1,
-    highlight2 = highlight_group_2,
-    point_size_range = c(1.5, 7)
-  )
+p_reactome_dot <- cerno_dotplot(
+  df = reactome_results,
+  top_n = top_n,
+  padj_cutoff = padj_cutoff,
+  highlight1 = highlight_group_1,
+  highlight2 = highlight_group_2,
+  point_size_range = c(1.5, 7)
+)
 
-  ggsave(
-    file.path(output_dir, "cerno_dotplot_reactome.png"),
-    p_reactome_dot,
-    width = 10,
-    height = 8,
-    dpi = 300
-  )
+# show plot
+p_reactome_dot
 
-  p_reactome_tree <- cerno_treeplot(
-    res_df = reactome_results,
-    members_df = reactome_members,
-    ontology = "REACTOME",
-    top_n = top_n,
-    padj_cutoff = padj_cutoff,
-    selection_mode = "significant_or_top_n",
-    nCluster = 5,
-    show_cluster_labels = FALSE,
-    show_legend = TRUE,
-    split_after_words = 20
-  )
+ggsave(
+  file.path(output_dir, "cerno_dotplot_reactome.png"),
+  p_reactome_dot,
+  width = 10,
+  height = 8,
+  dpi = 300
+)
 
-  ggsave(
-    file.path(output_dir, "cerno_treeplot_reactome.png"),
-    p_reactome_tree,
-    width = 12,
-    height = 9,
-    dpi = 300,
-    limitsize = FALSE
-  )
-}
+p_reactome_tree <- cerno_treeplot(
+  res_df = reactome_results,
+  members_df = reactome_members,
+  ontology = "REACTOME",
+  top_n = top_n,
+  padj_cutoff = padj_cutoff,
+  selection_mode = "significant_or_top_n",
+  nCluster = 5,
+  show_cluster_labels = FALSE,
+  show_legend = TRUE,
+  split_after_words = 20
+)
+
+# show plot
+p_reactome_tree
+
+ggsave(
+  file.path(output_dir, "cerno_treeplot_reactome.png"),
+  p_reactome_tree,
+  width = 12,
+  height = 9,
+  dpi = 300,
+  limitsize = FALSE
+)
+
