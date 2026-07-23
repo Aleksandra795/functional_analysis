@@ -355,7 +355,7 @@ cerno_go_graph <- function(res_df,
   )
 
   n_components <- igraph::components(
-    igraph::as.undirected(graph, mode = "collapse")
+    igraph::as_undirected(graph, mode = "collapse")
   )$no
 
   if (is.null(title)) {
@@ -398,7 +398,6 @@ cerno_go_graph <- function(res_df,
         x = x,
         y = y
       ),
-      inherit.aes = FALSE,
       shape = 21,
       color = ancestor_node_color,
       fill = ancestor_node_fill,
@@ -415,7 +414,6 @@ cerno_go_graph <- function(res_df,
         size = AUC_value,
         fill = neglog10_padj
       ),
-      inherit.aes = FALSE,
       shape = 21,
       color = "black",
       stroke = 0.35,
@@ -432,7 +430,6 @@ cerno_go_graph <- function(res_df,
         y = y,
         label = node_label
       ),
-      inherit.aes = FALSE,
       repel = TRUE,
       size = label_size,
       label.size = 0.15,
@@ -462,10 +459,6 @@ cerno_go_graph <- function(res_df,
       edge_linetype = ggplot2::guide_legend(
         title = "GO relationship",
         order = 1,
-        override.aes = list(
-          alpha = 1,
-          linewidth = 0.9
-        )
       ),
       fill = ggplot2::guide_colorbar(
         title = expression(-log[10]("FDR")),
