@@ -38,7 +38,28 @@ CERNO results may be stored in Excel files and should contain the following colu
 | `cerno_simplify_go_terms()` | Groups semantically redundant GO terms and selects representatives | `ontology`, `selection_mode`, `similarity_cutoff`, `semantic_measure` |
 | `cerno_go_redundancy_emap()` | Visualizes semantic similarity among GO terms | `label`, `similarity_cutoff`, `layout`, `show_removed_labels` |
 
-Common values of `selection_mode` are `significant_top_n`, `significant_all`, `top_n` and `significant_or_top_n`, depending on the function.
+## Key parameters
+
+The visualization functions use a consistent set of parameters wherever applicable:
+
+* `ontology` selects the functional category to analyze. Supported GO values are `"BP"`, `"CC"` and `"MF"`. The tree plot also supports `"REACTOME"` when appropriate pathway definitions are supplied.
+* `top_n` defines the maximum number of terms included in the visualization.
+* `padj_cutoff` defines the adjusted p-value threshold used to identify statistically significant terms. The default value is `0.05`.
+* `selection_mode` controls how terms are selected before constructing tree, hierarchy and redundancy visualizations:
+
+  * `"significant_top_n"` selects up to `top_n` terms with adjusted p-values below `padj_cutoff`.
+  * `"significant_all"` selects all terms with adjusted p-values below `padj_cutoff`.
+  * `"top_n"` selects the `top_n` terms with the lowest adjusted p-values, regardless of significance.
+  * `"significant_or_top_n"` uses significant terms when enough are available for the selected visualization; otherwise, it falls back to the `top_n` terms with the lowest adjusted p-values.
+* `ontology_col`, `id_col`, `term_col`, `padj_col` and `auc_col` specify the corresponding columns in the input data. Their defaults are `"ONTOLOGY"`, `"ID"`, `"Title"`, `"adj.P.Val"` and `"AUC"`.
+* `split_after_words` controls line wrapping in long pathway names.
+* `point_size_range` controls the minimum and maximum point sizes used to represent AUC values.
+* `nCluster` defines the number of functional clusters displayed in a pathway tree.
+* `similarity_cutoff` defines the minimum GO semantic similarity required to group or connect terms in the redundancy analysis.
+* `semantic_measure` selects the GO semantic similarity method. The default is `"Wang"`.
+* `max_depth` controls how many GO ancestor levels are included in the hierarchy graph. For greater clarity, if you have >30 significant pathways, set max_depth to 2-3.
+
+And other parameters related to labels, legends, layout and figure dimensions.
 
 ## Running the analysis
 
@@ -56,9 +77,6 @@ presented in the Biomedical Knowledge Mining book and the enrichplot
 ecosystem.
 
 The code provides custom implementations adapted to tabular CERNO results.
-In particular, the dot plot, Manhattan-style plot, pathway-overlap tree,
-GO hierarchy graph and semantic redundancy network were adapted to operate
-on CERNO result tables.
 
 CERNO results may be generated using the tmod R package.
 
