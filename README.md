@@ -42,6 +42,7 @@ CERNO results may be stored in Excel files and should contain the following colu
 
 The visualization functions use a consistent set of parameters wherever applicable:
 
+* `highlight1` and `highlight2` are lists of exact pathway names or IDs that will be highlighted in the dotplot (by color) and treeplot (with one or two stars *, respectively), optional.
 * `ontology` selects the functional category to analyze. Supported GO values are `"BP"`, `"CC"` and `"MF"`. The tree plot also supports `"REACTOME"` when appropriate pathway definitions are supplied.
 * `top_n` defines the maximum number of terms included in the visualization.
 * `padj_cutoff` defines the adjusted p-value threshold used to identify statistically significant terms. The default value is `0.05`.
