@@ -77,7 +77,7 @@ go_results <- purrr::imap_dfr(
   }
 )
 
-go_results <- purrr::map_dfr(
+go_results2 <- purrr::map_dfr(
   c("BP", "CC", "MF"),
   function(ontology) {
     canonicalize_result_ids(
@@ -107,6 +107,8 @@ p_dot <- cerno_dotplot(
   padj_cutoff = padj_cutoff,
   highlight1 = highlight_group_1,
   highlight2 = highlight_group_2,
+  highlight_color1 = "#D52217",
+  highlight_color2 = "#F2BD03",
   point_size_range = c(1.5, 7)
 )
 
@@ -143,7 +145,7 @@ ggsave(
 )
 
 # Pathway-overlap tree --------------------------------------------------------
-p_tree <- cerno_treeplot(
+p_tree <- cerno_treeplot_go(
   res_df = go_results,
   members_df = go_members,
   ontology = plot_ontology,
@@ -151,7 +153,8 @@ p_tree <- cerno_treeplot(
   highlight2 = highlight_group_2,
   top_n = top_n,
   padj_cutoff = padj_cutoff,
-  selection_mode = "significant_or_top_n",
+  selection_mode = "significant_all",
+  split_after_words = 20,
   nCluster = 5, # adapt to the plot
   tree_scale = 0.35, # how big the tree is
   tip_label_space = 0.5, # controls the space between tree and legend
@@ -181,7 +184,7 @@ p_go_graph <- cerno_go_graph(
   ontology = plot_ontology,
   top_n = top_n,
   padj_cutoff = padj_cutoff,
-  selection_mode = "significant_or_top_n",
+  selection_mode = "significant_all",
   max_depth = 4, # if you have >30 significant pathways, set smaller max_depth
   include_roots = TRUE,
   label_ancestors = FALSE,
@@ -208,7 +211,7 @@ simplified_go <- cerno_simplify_go_terms(
   ontology = plot_ontology,
   padj_cutoff = padj_cutoff,
   top_n = top_n,
-  selection_mode = "significant_or_top_n",
+  selection_mode = "significant_all",
   similarity_cutoff = 0.7,
   semantic_measure = "Wang"
 )
@@ -274,7 +277,7 @@ p_reactome_tree <- cerno_treeplot(
   ontology = "REACTOME",
   top_n = top_n,
   padj_cutoff = padj_cutoff,
-  selection_mode = "significant_or_top_n",
+  selection_mode = "significant_all",
   nCluster = 5,
   show_cluster_labels = FALSE,
   show_legend = TRUE,
