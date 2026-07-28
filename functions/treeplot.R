@@ -145,7 +145,6 @@ cerno_treeplot <- function(res_df,
           as.character(.data[[term_col]]) %in% as.character(highlight1) ~ "*",
         TRUE ~ ""
       ),
-      tip_label = paste0(tip_label, highlight_marker),
       phy_label = make.unique(
         stringr::str_replace_all(tip_label, "\n", " ")
       ),
@@ -195,6 +194,7 @@ cerno_treeplot <- function(res_df,
     dplyr::transmute(
       label = phy_label,
       tip_label = tip_label,
+      highlight_marker = highlight_marker,
       cluster = cluster,
       adj_pval = .data[[padj_col]],
       neglog10_padj = neglog10_padj,
@@ -293,6 +293,31 @@ cerno_treeplot <- function(res_df,
     cluster_levels
   )
   
+  rich_tip_data <- tip_data |>
+    dplyr::left_join(tip_y, by = "label") |>
+    dplyr::mutate(
+      rich_label = paste0(
+        stringr::str_replace_all(tip_label, "\n", "<br>"),
+        dplyr::if_else(
+          highlight_marker == "",
+          "",
+          paste0(
+            "<sub><span style='color:black;font-size:",
+            round(tip_label_size * 2.845 * 1.35, 1),
+            "pt'>",
+            stringr::str_replace_all(highlight_marker, "\\*", "&#42;"),
+            "</span></sub>"
+          )
+        )
+      ),
+      x = tree_max_x + tip_label_offset,
+      label_vjust = dplyr::if_else(
+        highlight_marker == "",
+        0.5,
+        0.62
+      ),
+    )
+  
   p <- p0 %<+% tip_data +
     ggtree::geom_hilight(
       data = clade_nodes,
@@ -313,14 +338,29 @@ cerno_treeplot <- function(res_df,
       show.legend = TRUE
     ) +
     ggtree::geom_tiplab(
-      aes(
-        label = tip_label,
-        color = cluster_name
-      ),
-      size = tip_label_size,
+      aes(label = ""),
       offset = tip_label_offset,
       align = TRUE,
-      linesize = 0.10,
+      color = "grey65",
+      linetype = "dotted",
+      linesize = 0.20,
+      show.legend = FALSE
+    ) +
+    ggtext::geom_richtext(
+      data = rich_tip_data,
+      aes(
+        x = x,
+        y = y,
+        label = rich_label,
+        color = cluster_name,
+        vjust = label_vjust
+      ),
+      inherit.aes = FALSE,
+      hjust = 0,
+      size = tip_label_size,
+      fill = NA,
+      label.color = NA,
+      label.padding = grid::unit(rep(0, 4), "pt"),
       show.legend = FALSE
     ) +
     scale_fill_manual(
@@ -331,10 +371,11 @@ cerno_treeplot <- function(res_df,
       values = cluster_palette,
       guide = "none"
     ) +
-    scale_size_continuous(
+    scale_radius(
       range = point_size_range,
-      name = size_col
-    ) +
+      name = size_col,
+      breaks = scales::pretty_breaks(n = 5)
+    )+
     guides(
       fill = guide_legend(
         override.aes = list(alpha = 0.65),
